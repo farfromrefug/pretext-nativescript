@@ -168,7 +168,7 @@ export function textMayContainEmoji(text: string): boolean {
 
 // On NativeScript, Paint.measureText is already accurate for emoji — no DOM span
 // calibration is needed, so emoji correction is always 0.
-function getEmojiCorrection(_font: string, _fontSize: number): number {
+function getEmojiCorrection(_font: string): number {
   return 0
 }
 
@@ -292,7 +292,7 @@ export function getFontMeasurementState(font: string, needsEmojiCorrection: bool
   getMeasurePaint(font)
   const cache = getSegmentMetricCache(font)
   const fontSize = parseFontSize(font)
-  const emojiCorrection = needsEmojiCorrection ? getEmojiCorrection(font, fontSize) : 0
+  const emojiCorrection = needsEmojiCorrection ? getEmojiCorrection(font) : 0
   return { cache, fontSize, emojiCorrection }
 }
 

@@ -19,7 +19,8 @@
  */
 
 // ---------------------------------------------------------------------------
-// CJK code-point ranges — must stay in sync with isCJKCodePoint in analysis.ts
+// CJK code-point ranges — copied from isCJKCodePoint in analysis.ts.
+// When updating either file, keep both in sync.
 // ---------------------------------------------------------------------------
 
 function isCJKCodePoint(cp: number): boolean {

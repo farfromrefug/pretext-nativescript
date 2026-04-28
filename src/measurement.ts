@@ -18,6 +18,9 @@ export type EngineProfile = {
 
 export type BreakableFitMode = 'sum-graphemes' | 'segment-prefixes' | 'pair-context'
 
+// Minimal interface for a 2D drawing context used only for text measurement.
+type MeasureCtx = { font: string; measureText(text: string): { width: number } }
+
 // DOM canvas context used for text measurement.
 let measureCtx: MeasureCtx | null = null
 // Track the last font applied to the shared context to avoid redundant assignments.
@@ -53,9 +56,6 @@ export function parseFontSize(font: string): number {
   if (start === end) return 16
   return parseFloat(font.slice(start, end))
 }
-
-// Minimal interface for a 2D drawing context used only for text measurement.
-type MeasureCtx = { font: string; measureText(text: string): { width: number } }
 
 // Return the shared canvas 2D context configured for the given font.
 function getMeasureContext(font: string): MeasureCtx {
@@ -155,8 +155,8 @@ export function textMayContainEmoji(text: string): boolean {
 
 // Detect how much the canvas over-measures emoji relative to DOM at the given font.
 // Returns the per-emoji inflation (positive means canvas is wider than DOM).
-// The correction depends on the font string (which encodes the size); the
-// fontSize number is not used directly in the DOM measurement path.
+// The correction depends only on the font string (which encodes the size);
+// it is cached per font string and is 0 when canvas and DOM agree.
 function getEmojiCorrection(font: string): number {
   let correction = emojiCorrectionCache.get(font)
   if (correction !== undefined) return correction
