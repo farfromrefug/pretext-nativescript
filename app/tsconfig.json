@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@pretext/layout": ["../src/layout.ts"],
+      "@pretext/rich-inline": ["../src/rich-inline.ts"],
+      "@pretext/measurement": ["../src/measurement.ts"],
+      "@pretext/*": ["../src/*"]
+    }
+  },
+  "include": ["src/**/*", "../src/**/*"]
+}

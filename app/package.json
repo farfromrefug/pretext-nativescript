@@ -1,0 +1,32 @@
+{
+  "name": "pretext-nativescript-demo",
+  "version": "1.0.0",
+  "description": "NativeScript Vue demo app for @chenglou/pretext",
+  "private": true,
+  "main": "src/app.ts",
+  "scripts": {
+    "android": "ns run android",
+    "ios": "ns run ios",
+    "build:android": "ns build android",
+    "build:ios": "ns build ios"
+  },
+  "dependencies": {
+    "@nativescript-community/ui-canvas": "^4.6.46",
+    "@nativescript/core": "~8.8.0",
+    "marked": "^14.0.0",
+    "nativescript-vue": "~3.0.0"
+  },
+  "devDependencies": {
+    "@nativescript/android": "~8.8.0",
+    "@nativescript/ios": "~8.8.0",
+    "@nativescript/webpack": "~5.0.0",
+    "@vue/runtime-core": "~3.4.0",
+    "typescript": "~5.4.0",
+    "vue": "~3.4.0",
+    "vue-loader": "~17.0.0"
+  },
+  "nativescript": {
+    "id": "org.nativescript.pretextdemo",
+    "discardUncaughtJsExceptions": true
+  }
+}

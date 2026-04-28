@@ -1,9 +1,24 @@
-import { beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 // Keep the permanent suite small and durable. These tests exercise the shipped
 // prepare/layout exports with a deterministic fake canvas backend. For narrow
 // browser-specific investigations, prefer throwaway probes and browser checkers
 // over mirroring the full implementation here.
+
+// Stub out the NativeScript canvas package so the test suite runs in Bun
+// without a NativeScript runtime. The real Paint is never called because
+// setMeasurePaintForTesting() injects a TestPaint before any prepare() runs.
+void mock.module('@nativescript-community/ui-canvas', () => ({
+  Paint: class PaintStub {
+    measureText(_text: string): number { return 0 }
+    setTextSize(_size: number): void {}
+    setFontFamily(_family: string): void {}
+    setFontWeight(_weight: string): void {}
+    setFontStyle(_style: string): void {}
+    setAntiAlias(_aa: boolean): void {}
+  },
+  install: () => {},
+}))
 
 const FONT = '16px Test Sans'
 const LINE_HEIGHT = 19
@@ -244,30 +259,35 @@ function getNonSpaceSegmentLevels(
   return levels
 }
 
-class TestCanvasRenderingContext2D {
-  font = ''
+// Test-only Paint-like stub. It reconstructs a CSS-font-like string from the
+// individual calls that applyFontToPaint() makes, then forwards to measureWidth()
+// so the layout tests remain deterministic without a real NativeScript runtime.
+class TestPaint {
+  private _fontSize = parseFontSize(FONT)
+  private _fontFamily = 'Test Sans'
+  private _fontWeight = 'normal'
 
-  measureText(text: string): { width: number } {
-    return { width: measureWidth(text, this.font) }
-  }
-}
+  setTextSize(size: number): void { this._fontSize = size }
+  setFontFamily(family: string): void { this._fontFamily = family }
+  setFontWeight(weight: string): void { this._fontWeight = weight }
+  setFontStyle(_style: string): void {}
+  setAntiAlias(_aa: boolean): void {}
 
-class TestOffscreenCanvas {
-  constructor(_width: number, _height: number) {}
-
-  getContext(_kind: string): TestCanvasRenderingContext2D {
-    return new TestCanvasRenderingContext2D()
+  measureText(text: string): number {
+    const weightPrefix = this._fontWeight !== 'normal' ? `${this._fontWeight} ` : ''
+    return measureWidth(text, `${weightPrefix}${this._fontSize}px ${this._fontFamily}`)
   }
 }
 
 beforeAll(async () => {
-  Reflect.set(globalThis, 'OffscreenCanvas', TestOffscreenCanvas)
-  const [analysisMod, mod, lineBreakMod, richInlineMod] = await Promise.all([
+  const [analysisMod, mod, lineBreakMod, richInlineMod, measMod] = await Promise.all([
     import('./analysis.ts'),
     import('./layout.ts'),
     import('./line-break.ts'),
     import('./rich-inline.ts'),
+    import('./measurement.ts'),
   ])
+  measMod.setMeasurePaintForTesting(new TestPaint())
   ;({ isCJK } = analysisMod)
   ;({
     prepare,

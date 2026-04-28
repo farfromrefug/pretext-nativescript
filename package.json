@@ -87,5 +87,9 @@
     "oxlint-tsgolint": "^0.15.0",
     "tsgolint": "^0.0.1",
     "typescript": "6.0.2"
+  },
+  "peerDependencies": {
+    "@nativescript-community/ui-canvas": ">=4.0.0",
+    "@nativescript/core": ">=8.0.0"
   }
 }

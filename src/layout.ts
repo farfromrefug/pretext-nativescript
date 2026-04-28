@@ -372,9 +372,9 @@ function measureAnalysis(
     textMayContainEmoji(analysis.normalized),
   )
   const discretionaryHyphenWidth =
-    getCorrectedSegmentWidth('-', getSegmentMetrics('-', cache), emojiCorrection) +
+    getCorrectedSegmentWidth('-', getSegmentMetrics('-', cache, font), emojiCorrection) +
     (letterSpacing === 0 ? 0 : letterSpacing)
-  const spaceWidth = getCorrectedSegmentWidth(' ', getSegmentMetrics(' ', cache), emojiCorrection)
+  const spaceWidth = getCorrectedSegmentWidth(' ', getSegmentMetrics(' ', cache, font), emojiCorrection)
   const tabStopAdvance = spaceWidth * 8
   const hasLetterSpacing = letterSpacing !== 0
 
@@ -421,7 +421,7 @@ function measureAnalysis(
     wordLike: boolean,
     allowOverflowBreaks: boolean,
   ): void {
-    const textMetrics = getSegmentMetrics(text, cache)
+    const textMetrics = getSegmentMetrics(text, cache, font)
     const spacingGraphemeCount = hasLetterSpacing
       ? countRenderedSpacingGraphemes(text, kind)
       : 0
@@ -458,6 +458,7 @@ function measureAnalysis(
         cache,
         emojiCorrection,
         fitMode,
+        font,
       )
       pushMeasuredSegment(
         text,
@@ -524,7 +525,7 @@ function measureAnalysis(
       continue
     }
 
-    const segMetrics = getSegmentMetrics(segText, cache)
+    const segMetrics = getSegmentMetrics(segText, cache, font)
 
     if (segKind === 'text' && segMetrics.containsCJK) {
       const baseUnits = buildBaseCjkUnits(segText, engineProfile)

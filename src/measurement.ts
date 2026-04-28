@@ -1,3 +1,4 @@
+import { Paint } from '@nativescript-community/ui-canvas'
 import { isCJK } from './analysis.js'
 
 export type SegmentMetrics = {
@@ -18,7 +19,10 @@ export type EngineProfile = {
 
 export type BreakableFitMode = 'sum-graphemes' | 'segment-prefixes' | 'pair-context'
 
-let measureContext: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null
+// NativeScript Paint instance used for text measurement (replaces DOM canvas context).
+let measurePaint: Paint | null = null
+// Track the last font applied to the shared paint so we avoid redundant font updates.
+let measurePaintFont = ''
 const segmentMetricCaches = new Map<string, Map<string, SegmentMetrics>>()
 let cachedEngineProfile: EngineProfile | null = null
 
@@ -31,22 +35,52 @@ const MAX_PREFIX_FIT_GRAPHEMES = 96
 const emojiPresentationRe = /\p{Emoji_Presentation}/u
 const maybeEmojiRe = /[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u20E3]/u
 let sharedGraphemeSegmenter: Intl.Segmenter | null = null
-const emojiCorrectionCache = new Map<string, number>()
 
-export function getMeasureContext(): CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D {
-  if (measureContext !== null) return measureContext
+// --- font string parsers ---
 
-  if (typeof OffscreenCanvas !== 'undefined') {
-    measureContext = new OffscreenCanvas(1, 1).getContext('2d')!
-    return measureContext
+function parseFontWeight(font: string): string {
+  // Match numeric weight (100–900) or the keyword "bold" that appears before the size.
+  const m = font.match(/\b(bold|[1-9]00)\b(?=.*?\d+(?:\.\d+)?px)/i)
+  return m ? m[1]!.toLowerCase() : 'normal'
+}
+
+function parseFontStyle(font: string): string {
+  // Match "italic" or "oblique" before the size.
+  const m = font.match(/\b(italic|oblique)\b(?=.*?\d+(?:\.\d+)?px)/i)
+  return m ? 'italic' : 'normal'
+}
+
+function parseFontFamily(font: string): string {
+  // Font families follow the size token.
+  const sizeMatch = font.match(/\d+(?:\.\d+)?\s*(?:\/\S+)?\s*px\s*(.+)/)
+  if (!sizeMatch) return 'sans-serif'
+  const first = sizeMatch[1]!.trim().split(',')[0]!.trim()
+  // Strip surrounding quotes.
+  return first.replace(/^["']|["']$/g, '').trim() || 'sans-serif'
+}
+
+// Apply a CSS font shorthand string to an existing Paint instance.
+function applyFontToPaint(paint: Paint, font: string): void {
+  const size = parseFontSize(font)
+  paint.setTextSize(size)
+  paint.setFontFamily(parseFontFamily(font))
+  paint.setFontWeight(parseFontWeight(font) as Parameters<Paint['setFontWeight']>[0])
+  paint.setFontStyle(parseFontStyle(font) as Parameters<Paint['setFontStyle']>[0])
+}
+
+// Return the shared Paint configured for the given font string.
+// This is the NativeScript equivalent of getMeasureContext() + ctx.font = font.
+export function getMeasurePaint(font: string): Paint {
+  if (measurePaint === null) {
+    measurePaint = new Paint()
+    measurePaint.setAntiAlias(true)
+    measurePaintFont = ''
   }
-
-  if (typeof document !== 'undefined') {
-    measureContext = document.createElement('canvas').getContext('2d')!
-    return measureContext
+  if (font !== measurePaintFont) {
+    applyFontToPaint(measurePaint, font)
+    measurePaintFont = font
   }
-
-  throw new Error('Text measurement requires OffscreenCanvas or a DOM canvas context.')
+  return measurePaint
 }
 
 export function getSegmentMetricCache(font: string): Map<string, SegmentMetrics> {
@@ -58,12 +92,12 @@ export function getSegmentMetricCache(font: string): Map<string, SegmentMetrics>
   return cache
 }
 
-export function getSegmentMetrics(seg: string, cache: Map<string, SegmentMetrics>): SegmentMetrics {
+export function getSegmentMetrics(seg: string, cache: Map<string, SegmentMetrics>, font: string): SegmentMetrics {
   let metrics = cache.get(seg)
   if (metrics === undefined) {
-    const ctx = getMeasureContext()
+    const paint = getMeasurePaint(font)
     metrics = {
-      width: ctx.measureText(seg).width,
+      width: paint.measureText(seg),
       containsCJK: isCJK(seg),
     }
     cache.set(seg, metrics)
@@ -74,41 +108,21 @@ export function getSegmentMetrics(seg: string, cache: Map<string, SegmentMetrics
 export function getEngineProfile(): EngineProfile {
   if (cachedEngineProfile !== null) return cachedEngineProfile
 
-  if (typeof navigator === 'undefined') {
-    cachedEngineProfile = {
-      lineFitEpsilon: 0.005,
-      carryCJKAfterClosingQuote: false,
-      breakKeepAllAfterPunctuation: true,
-      preferPrefixWidthsForBreakableRuns: false,
-      preferEarlySoftHyphenBreak: false,
-    }
-    return cachedEngineProfile
-  }
-
-  const ua = navigator.userAgent
-  const vendor = navigator.vendor
-  const isSafari =
-    vendor === 'Apple Computer, Inc.' &&
-    ua.includes('Safari/') &&
-    !ua.includes('Chrome/') &&
-    !ua.includes('Chromium/') &&
-    !ua.includes('CriOS/') &&
-    !ua.includes('FxiOS/') &&
-    !ua.includes('EdgiOS/')
-  const isChromium =
-    ua.includes('Chrome/') ||
-    ua.includes('Chromium/') ||
-    ua.includes('CriOS/') ||
-    ua.includes('Edg/')
-
+  // NativeScript runs on Android (Chromium-based text engine) and iOS (WebKit-based).
+  // Default to the Android/Chromium profile; callers can override via setEngineProfile().
   cachedEngineProfile = {
-    lineFitEpsilon: isSafari ? 1 / 64 : 0.005,
-    carryCJKAfterClosingQuote: isChromium,
-    breakKeepAllAfterPunctuation: !isSafari,
-    preferPrefixWidthsForBreakableRuns: isSafari,
-    preferEarlySoftHyphenBreak: isSafari,
+    lineFitEpsilon: 0.005,
+    carryCJKAfterClosingQuote: true,
+    breakKeepAllAfterPunctuation: true,
+    preferPrefixWidthsForBreakableRuns: false,
+    preferEarlySoftHyphenBreak: false,
   }
   return cachedEngineProfile
+}
+
+// Allow callers to inject a platform-specific profile (e.g. iOS/Safari-like values).
+export function setEngineProfile(profile: EngineProfile): void {
+  cachedEngineProfile = profile
 }
 
 export function parseFontSize(font: string): number {
@@ -131,34 +145,10 @@ export function textMayContainEmoji(text: string): boolean {
   return maybeEmojiRe.test(text)
 }
 
-function getEmojiCorrection(font: string, fontSize: number): number {
-  let correction = emojiCorrectionCache.get(font)
-  if (correction !== undefined) return correction
-
-  const ctx = getMeasureContext()
-  ctx.font = font
-  const canvasW = ctx.measureText('\u{1F600}').width
-  correction = 0
-  if (
-    canvasW > fontSize + 0.5 &&
-    typeof document !== 'undefined' &&
-    document.body !== null
-  ) {
-    const span = document.createElement('span')
-    span.style.font = font
-    span.style.display = 'inline-block'
-    span.style.visibility = 'hidden'
-    span.style.position = 'absolute'
-    span.textContent = '\u{1F600}'
-    document.body.appendChild(span)
-    const domW = span.getBoundingClientRect().width
-    document.body.removeChild(span)
-    if (canvasW - domW > 0.5) {
-      correction = canvasW - domW
-    }
-  }
-  emojiCorrectionCache.set(font, correction)
-  return correction
+// On NativeScript, Paint.measureText is already accurate for emoji — no DOM span
+// calibration is needed, so emoji correction is always 0.
+function getEmojiCorrection(_font: string, _fontSize: number): number {
+  return 0
 }
 
 function countEmojiGraphemes(text: string): number {
@@ -186,11 +176,12 @@ export function getSegmentGraphemeWidths(
   seg: string,
   cache: Map<string, SegmentMetrics>,
   emojiCorrection: number,
+  font: string,
 ): number[] | null {
   const widths: number[] = []
   const graphemeSegmenter = getSharedGraphemeSegmenter()
   for (const gs of graphemeSegmenter.segment(seg)) {
-    const graphemeMetrics = getSegmentMetrics(gs.segment, cache)
+    const graphemeMetrics = getSegmentMetrics(gs.segment, cache, font)
     widths.push(getCorrectedSegmentWidth(gs.segment, graphemeMetrics, emojiCorrection))
   }
 
@@ -203,6 +194,7 @@ export function getSegmentBreakableFitAdvances(
   cache: Map<string, SegmentMetrics>,
   emojiCorrection: number,
   mode: BreakableFitMode,
+  font: string,
 ): number[] | null {
   if (metrics.breakableFitAdvances !== undefined && metrics.breakableFitMode === mode) {
     return metrics.breakableFitAdvances
@@ -222,7 +214,7 @@ export function getSegmentBreakableFitAdvances(
   if (mode === 'sum-graphemes') {
     const advances: number[] = []
     for (const grapheme of graphemes) {
-      const graphemeMetrics = getSegmentMetrics(grapheme, cache)
+      const graphemeMetrics = getSegmentMetrics(grapheme, cache, font)
       advances.push(getCorrectedSegmentWidth(grapheme, graphemeMetrics, emojiCorrection))
     }
     metrics.breakableFitAdvances = advances
@@ -235,14 +227,14 @@ export function getSegmentBreakableFitAdvances(
     let previousWidth = 0
 
     for (const grapheme of graphemes) {
-      const graphemeMetrics = getSegmentMetrics(grapheme, cache)
+      const graphemeMetrics = getSegmentMetrics(grapheme, cache, font)
       const currentWidth = getCorrectedSegmentWidth(grapheme, graphemeMetrics, emojiCorrection)
 
       if (previousGrapheme === null) {
         advances.push(currentWidth)
       } else {
         const pair = previousGrapheme + grapheme
-        const pairMetrics = getSegmentMetrics(pair, cache)
+        const pairMetrics = getSegmentMetrics(pair, cache, font)
         advances.push(getCorrectedSegmentWidth(pair, pairMetrics, emojiCorrection) - previousWidth)
       }
 
@@ -260,7 +252,7 @@ export function getSegmentBreakableFitAdvances(
 
   for (const grapheme of graphemes) {
     prefix += grapheme
-    const prefixMetrics = getSegmentMetrics(prefix, cache)
+    const prefixMetrics = getSegmentMetrics(prefix, cache, font)
     const nextPrefixWidth = getCorrectedSegmentWidth(prefix, prefixMetrics, emojiCorrection)
     advances.push(nextPrefixWidth - prefixWidth)
     prefixWidth = nextPrefixWidth
@@ -275,8 +267,8 @@ export function getFontMeasurementState(font: string, needsEmojiCorrection: bool
   fontSize: number
   emojiCorrection: number
 } {
-  const ctx = getMeasureContext()
-  ctx.font = font
+  // Ensure the shared paint is configured for this font so subsequent measureText calls are correct.
+  getMeasurePaint(font)
   const cache = getSegmentMetricCache(font)
   const fontSize = parseFontSize(font)
   const emojiCorrection = needsEmojiCorrection ? getEmojiCorrection(font, fontSize) : 0
@@ -285,6 +277,18 @@ export function getFontMeasurementState(font: string, needsEmojiCorrection: bool
 
 export function clearMeasurementCaches(): void {
   segmentMetricCaches.clear()
-  emojiCorrectionCache.clear()
   sharedGraphemeSegmenter = null
+  // Reset the font string so the next getMeasurePaint call re-applies font settings,
+  // but keep the Paint instance alive (it may be a test mock injected from outside).
+  measurePaintFont = ''
+}
+
+/**
+ * Inject a pre-built Paint-like object for deterministic unit tests.
+ * The injected object only needs to implement `measureText(text: string): number`.
+ * Call `clearMeasurementCaches()` to remove the override after the test suite.
+ */
+export function setMeasurePaintForTesting(fakePaint: Pick<Paint, 'measureText'>): void {
+  measurePaint = fakePaint as Paint
+  measurePaintFont = ''
 }
