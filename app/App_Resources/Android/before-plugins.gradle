@@ -1,0 +1,7 @@
+ext {
+    compileSdk = 35
+    targetSdk = 35
+    kotlinVersion = "2.1.0"
+    androidBuildToolsVersion = "8.3.2"
+    buildToolsVersion = "35.0.0"
+}

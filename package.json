@@ -81,15 +81,13 @@
     "start:windows": "bun pages/*.html pages/demos/*.html pages/demos/*/index.html --host=0.0.0.0:3000"
   },
   "devDependencies": {
+    "@nativescript-community/ui-canvas": ">=4.6.46",
+    "@nativescript/core": "~8.9.9",
     "@types/bun": "latest",
     "marked": "^17.0.5",
     "oxlint": "^1.51.0",
     "oxlint-tsgolint": "^0.15.0",
     "tsgolint": "^0.0.1",
     "typescript": "6.0.2"
-  },
-  "peerDependencies": {
-    "@nativescript-community/ui-canvas": ">=4.0.0",
-    "@nativescript/core": ">=8.0.0"
   }
 }
