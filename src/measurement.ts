@@ -38,34 +38,50 @@ let sharedGraphemeSegmenter: Intl.Segmenter | null = null
 
 // --- font string parsers ---
 
-function parseFontWeight(font: string): string {
-  // Match numeric weight (100–900) or the keyword "bold" that appears before the size.
-  const m = font.match(/\b(bold|[1-9]00)\b(?=.*?\d+(?:\.\d+)?px)/i)
-  return m ? m[1]!.toLowerCase() : 'normal'
-}
+// Parse a CSS font shorthand string into its components.
+// Format: [style] [variant] [weight] [size[/line-height]] [family, ...]
+// We first locate the size token (the first `\d+px` substring) to split
+// the string into a before (weight/style keywords) and after (families) part.
+// This avoids lookaheads and the associated ReDoS risk.
+type ParsedFont = { size: number; weight: string; style: string; family: string }
 
-function parseFontStyle(font: string): string {
-  // Match "italic" or "oblique" before the size.
-  const m = font.match(/\b(italic|oblique)\b(?=.*?\d+(?:\.\d+)?px)/i)
-  return m ? 'italic' : 'normal'
-}
+function parseFont(font: string): ParsedFont {
+  const sizeMatch = /(\d+(?:\.\d+)?)(\/\S+)?px/.exec(font)
+  if (!sizeMatch) return { size: 16, weight: 'normal', style: 'normal', family: 'sans-serif' }
 
-function parseFontFamily(font: string): string {
-  // Font families follow the size token.
-  const sizeMatch = font.match(/\d+(?:\.\d+)?\s*(?:\/\S+)?\s*px\s*(.+)/)
-  if (!sizeMatch) return 'sans-serif'
-  const first = sizeMatch[1]!.trim().split(',')[0]!.trim()
-  // Strip surrounding quotes.
-  return first.replace(/^["']|["']$/g, '').trim() || 'sans-serif'
+  const before = font.slice(0, sizeMatch.index).toLowerCase()
+  const after = font.slice(sizeMatch.index + sizeMatch[0].length).trim()
+
+  // Derive weight: look for a numeric weight or the keyword "bold" in 'before'.
+  // 'before' is small (a few tokens at most), so a simple search is fine.
+  let weight = 'normal'
+  for (const token of before.split(/\s+/)) {
+    if (token === 'bold') { weight = 'bold'; break }
+    const n = Number(token)
+    if (Number.isFinite(n) && n >= 1 && n <= 1000) { weight = String(Math.round(n)); break }
+  }
+
+  // Derive style.
+  const style = before.includes('italic') || before.includes('oblique') ? 'italic' : 'normal'
+
+  // Derive family: first entry in the comma-separated family list.
+  const rawFamily = after.split(',')[0]!.trim().replace(/^["']|["']$/g, '').trim()
+  const family = rawFamily || 'sans-serif'
+
+  return { size: parseFloat(sizeMatch[1]!), weight, style, family }
 }
 
 // Apply a CSS font shorthand string to an existing Paint instance.
 function applyFontToPaint(paint: Paint, font: string): void {
-  const size = parseFontSize(font)
-  paint.setTextSize(size)
-  paint.setFontFamily(parseFontFamily(font))
-  paint.setFontWeight(parseFontWeight(font) as Parameters<Paint['setFontWeight']>[0])
-  paint.setFontStyle(parseFontStyle(font) as Parameters<Paint['setFontStyle']>[0])
+  const parsed = parseFont(font)
+  paint.setTextSize(parsed.size)
+  paint.setFontFamily(parsed.family)
+  paint.setFontWeight(parsed.weight as Parameters<Paint['setFontWeight']>[0])
+  paint.setFontStyle(parsed.style as Parameters<Paint['setFontStyle']>[0])
+}
+
+export function parseFontSize(font: string): number {
+  return parseFont(font).size
 }
 
 // Return the shared Paint configured for the given font string.
@@ -123,11 +139,6 @@ export function getEngineProfile(): EngineProfile {
 // Allow callers to inject a platform-specific profile (e.g. iOS/Safari-like values).
 export function setEngineProfile(profile: EngineProfile): void {
   cachedEngineProfile = profile
-}
-
-export function parseFontSize(font: string): number {
-  const m = font.match(/(\d+(?:\.\d+)?)\s*px/)
-  return m ? parseFloat(m[1]!) : 16
 }
 
 function getSharedGraphemeSegmenter(): Intl.Segmenter {
