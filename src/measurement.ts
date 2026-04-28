@@ -39,21 +39,31 @@ let sharedGraphemeSegmenter: Intl.Segmenter | null = null
 // --- font string parsers ---
 
 // Parse a CSS font shorthand string into its components.
-// Format: [style] [variant] [weight] [size[/line-height]] [family, ...]
-// We first locate the size token (the first `\d+px` substring) to split
+// Format: [style] [weight] [size] [family, ...]
+// We locate the size token by scanning for 'px' and splitting
 // the string into a before (weight/style keywords) and after (families) part.
-// This avoids lookaheads and the associated ReDoS risk.
+// No regex lookaheads are used to keep the implementation ReDoS-free.
 type ParsedFont = { size: number; weight: string; style: string; family: string }
 
 function parseFont(font: string): ParsedFont {
-  const sizeMatch = /(\d+(?:\.\d+)?)(\/\S+)?px/.exec(font)
-  if (!sizeMatch) return { size: 16, weight: 'normal', style: 'normal', family: 'sans-serif' }
+  // Font strings in this library are always `[weight] [style] Npx family, ...`
+  // (no line-height suffix), so matching `\d+px` is sufficient.
+  const sizeIdx = font.indexOf('px')
+  if (sizeIdx < 1) return { size: 16, weight: 'normal', style: 'normal', family: 'sans-serif' }
 
-  const before = font.slice(0, sizeMatch.index).toLowerCase()
-  const after = font.slice(sizeMatch.index + sizeMatch[0].length).trim()
+  // Walk backwards from 'px' to find the number.
+  let numEnd = sizeIdx
+  let numStart = numEnd
+  while (numStart > 0 && (font[numStart - 1] === '.' || (font[numStart - 1]! >= '0' && font[numStart - 1]! <= '9'))) {
+    numStart--
+  }
+  if (numStart === numEnd) return { size: 16, weight: 'normal', style: 'normal', family: 'sans-serif' }
+
+  const size = parseFloat(font.slice(numStart, numEnd))
+  const before = font.slice(0, numStart).toLowerCase().trim()
+  const after = font.slice(sizeIdx + 2).trim() // skip 'px'
 
   // Derive weight: look for a numeric weight or the keyword "bold" in 'before'.
-  // 'before' is small (a few tokens at most), so a simple search is fine.
   let weight = 'normal'
   for (const token of before.split(/\s+/)) {
     if (token === 'bold') { weight = 'bold'; break }
@@ -68,7 +78,7 @@ function parseFont(font: string): ParsedFont {
   const rawFamily = after.split(',')[0]!.trim().replace(/^["']|["']$/g, '').trim()
   const family = rawFamily || 'sans-serif'
 
-  return { size: parseFloat(sizeMatch[1]!), weight, style, family }
+  return { size, weight, style, family }
 }
 
 // Apply a CSS font shorthand string to an existing Paint instance.

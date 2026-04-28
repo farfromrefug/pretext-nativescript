@@ -7,7 +7,7 @@
       <!-- Stats -->
       <StackLayout row="0" class="stats-bar">
         <Label :text="`Column width: ${columnWidth}px   Lines: left=${leftLineCount} right=${rightLineCount}`" class="stats-label" />
-        <Label :text="`Body body: ${BODY_FONT_DISPLAY}   LineHeight: ${BODY_LINE_HEIGHT}px`" class="stats-label" />
+        <Label :text="`Font: ${BODY_FONT_DISPLAY}   LineHeight: ${BODY_LINE_HEIGHT}px`" class="stats-label" />
       </StackLayout>
 
       <!-- Width slider -->

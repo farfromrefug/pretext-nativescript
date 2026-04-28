@@ -13,7 +13,6 @@
   "dependencies": {
     "@nativescript-community/ui-canvas": "^4.6.46",
     "@nativescript/core": "~8.8.0",
-    "marked": "^14.0.0",
     "nativescript-vue": "~3.0.0"
   },
   "devDependencies": {
