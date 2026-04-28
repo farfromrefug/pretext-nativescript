@@ -13,6 +13,10 @@ module.exports = (env) => {
     // 2. Replace the DOM canvas measurement backend with the NativeScript
     //    Paint-based implementation.  All relative imports of measurement.js
     //    inside layout.ts / line-break.ts resolve to this NS override.
+    //    Two aliases are needed:
+    //      - the .ts path, which is what webpack resolves from TypeScript source
+    //        imports like `from './measurement.js'` when ts-loader is in play
+    //      - the .js specifier, in case any import resolves to the emitted JS
     config.resolve.alias
       .set(
         path.resolve(__dirname, '../src/measurement.ts'),

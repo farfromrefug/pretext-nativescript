@@ -82,8 +82,10 @@ function isWordCodePoint(cp: number): boolean {
   if (cp >= 0x1100 && cp <= 0x11FF) return true
   if (cp >= 0xA960 && cp <= 0xA97F) return true
   if (cp >= 0xD7B0 && cp <= 0xD7FF) return true
-  // High-surrogate start (astral letters not covered by CJK range)
-  if (cp >= 0xD800 && cp <= 0xDBFF) return true
+  // Note: `codePointAt()` always returns full Unicode code points, never raw
+  // surrogate values (0xD800–0xDFFF), so no surrogate check is needed here.
+  // Astral characters outside the CJK and above ranges (e.g. emoji) fall
+  // through to false and are treated as non-word-like, matching Intl.Segmenter.
   return false
 }
 
@@ -148,7 +150,8 @@ class SegmenterShim {
   }
 
   resolvedOptions(): { locale: string; granularity: 'word' | 'grapheme' } {
-    return { locale: '', granularity: this._granularity }
+    // Return 'und' (undefined language tag) — the shim has no locale concept.
+    return { locale: 'und', granularity: this._granularity }
   }
 }
 
